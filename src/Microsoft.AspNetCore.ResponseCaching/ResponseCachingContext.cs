@@ -419,6 +419,74 @@ namespace Microsoft.AspNetCore.ResponseCaching
             return true;
         }
 
+        internal bool EntryIsAcceptable(ResponseHeaders cachedResponseHeaders)
+        {
+            // Accept-Encoding
+            var requestAcceptEncoding = RequestHeaders.AcceptEncoding;
+            if (requestAcceptEncoding != null && requestAcceptEncoding.Count > 0)
+            {
+                // TODO:
+            }
+
+            // Accept-Charset
+            var requestAcceptCharset = RequestHeaders.AcceptCharset;
+            if (requestAcceptCharset != null && requestAcceptCharset.Count > 0)
+            {
+                var responseCharsetIsAcceptable = false;
+                var responseCharset = cachedResponseHeaders.ContentType.Charset;
+
+                foreach (var requestCharset in requestAcceptCharset)
+                {
+                    if (requestCharset.Quality != 0 &&
+                        (string.Equals("*", requestCharset.Value, StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(responseCharset, requestCharset.Value, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        responseCharsetIsAcceptable = true;
+                        break;
+                    }
+                }
+
+                if (!responseCharsetIsAcceptable)
+                {
+                    return false;
+                }
+            }
+
+            // Accept-Language
+            var requestAcceptLanguage = RequestHeaders.AcceptLanguage;
+            if (requestAcceptLanguage != null && requestAcceptLanguage.Count > 0)
+            {
+                // TODO:
+            }
+
+            // Accept
+            var requestAccept = RequestHeaders.Accept;
+            if (requestAccept != null && requestAccept.Count > 0)
+            {
+                // TODO: Combine with Accept-Charset?
+            }
+
+
+            return true;
+        }
+
+        internal bool CachedEntryIsValid(ResponseHeaders cachedResponseHeaders, TimeSpan age)
+        {
+            // TODO: user override
+
+            if (!EntryIsFresh(cachedResponseHeaders, age, verifyAgainstRequest: true))
+            {
+                return false;
+            }
+
+            if (!EntryIsAcceptable(cachedResponseHeaders))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         internal async Task<bool> TryServeFromCacheAsync()
         {
             _cacheKey = CreateCacheKey();
@@ -441,7 +509,7 @@ namespace Microsoft.AspNetCore.ResponseCaching
                 var age = _responseTime - cachedResponse.Created;
                 age = age > TimeSpan.Zero ? age : TimeSpan.Zero;
 
-                if (EntryIsFresh(cachedResponseHeaders, age, verifyAgainstRequest: true))
+                if (CachedEntryIsValid(cachedResponseHeaders, age))
                 {
                     var response = _httpContext.Response;
                     // Copy the cached status code and response headers
