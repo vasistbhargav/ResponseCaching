@@ -594,15 +594,11 @@ namespace Microsoft.AspNetCore.ResponseCaching
 
         internal void FinalizeCachingBody()
         {
-            if (CacheResponse && ResponseCacheStream.BufferingEnabled)
+            if (CacheResponse &&
+                ResponseCacheStream.BufferingEnabled &&
+                !(_options.MaximumCachedBodySize < ResponseCacheStream.BufferedStream.Length))
             {
                 _cachedResponse.Body = ResponseCacheStream.BufferedStream.ToArray();
-
-                // Check if the body is too large to be cached
-                if (_options.MaximumCachedBodySize < _cachedResponse.Body.Length)
-                {
-                    return;
-                }
 
                 _cache.Set(_cacheKey, _cachedResponse, _cachedResponseValidFor);
             }
