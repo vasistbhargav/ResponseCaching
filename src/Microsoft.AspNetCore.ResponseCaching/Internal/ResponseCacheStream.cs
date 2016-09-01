@@ -40,6 +40,8 @@ namespace Microsoft.AspNetCore.ResponseCaching.Internal
         public void DisableBuffering()
         {
             BufferingEnabled = false;
+            BufferedStream.SetLength(0);
+            BufferedStream.Capacity = 0;
             BufferedStream.Dispose();
         }
 
