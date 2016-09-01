@@ -614,28 +614,6 @@ namespace Microsoft.AspNetCore.ResponseCaching.Tests
             }
         }
 
-        private static async Task AssertResponseCachedAsync(HttpResponseMessage initialResponse, HttpResponseMessage subsequentResponse)
-        {
-            initialResponse.EnsureSuccessStatusCode();
-            subsequentResponse.EnsureSuccessStatusCode();
-
-            foreach (var header in initialResponse.Headers)
-            {
-                Assert.Equal(initialResponse.Headers.GetValues(header.Key), subsequentResponse.Headers.GetValues(header.Key));
-            }
-            Assert.True(subsequentResponse.Headers.Contains(HeaderNames.Age));
-            Assert.Equal(await initialResponse.Content.ReadAsStringAsync(), await subsequentResponse.Content.ReadAsStringAsync());
-        }
-
-        private static async Task AssertResponseNotCachedAsync(HttpResponseMessage initialResponse, HttpResponseMessage subsequentResponse)
-        {
-            initialResponse.EnsureSuccessStatusCode();
-            subsequentResponse.EnsureSuccessStatusCode();
-
-            Assert.False(subsequentResponse.Headers.Contains(HeaderNames.Age));
-            Assert.NotEqual(await initialResponse.Content.ReadAsStringAsync(), await subsequentResponse.Content.ReadAsStringAsync());
-        }
-
         [Fact]
         public async void Serves304_IfIfModifiedSince_Satisfied()
         {
@@ -752,10 +730,100 @@ namespace Microsoft.AspNetCore.ResponseCaching.Tests
             }
         }
 
-        private static IWebHostBuilder CreateBuilderWithResponseCaching(RequestDelegate requestDelegate) =>
-            CreateBuilderWithResponseCaching(app => { }, requestDelegate);
+        [Fact]
+        public async void ServesCachedContent_IfBodySize_IsCacheable()
+        {
+            var builder = CreateBuilderWithResponseCaching(new ResponseCachingOptions()
+            {
+                MaximumCachedBodySize = 100
+            },
+            async (context) =>
+            {
+                var uniqueId = Guid.NewGuid().ToString();
+                var headers = context.Response.GetTypedHeaders();
+                headers.CacheControl = new CacheControlHeaderValue()
+                {
+                    Public = true,
+                    MaxAge = TimeSpan.FromSeconds(10)
+                };
+                headers.Date = DateTimeOffset.UtcNow;
+                headers.Headers["X-Value"] = uniqueId;
+                await context.Response.WriteAsync(uniqueId);
+            });
 
-        private static IWebHostBuilder CreateBuilderWithResponseCaching(Action<IApplicationBuilder> configureDelegate, RequestDelegate requestDelegate)
+            using (var server = new TestServer(builder))
+            {
+                var client = server.CreateClient();
+                var initialResponse = await client.GetAsync("");
+                var subsequentResponse = await client.GetAsync("");
+
+                await AssertResponseCachedAsync(initialResponse, subsequentResponse);
+            }
+        }
+
+        [Fact]
+        public async void ServesFreshContent_IfBodySize_IsNotCacheable()
+        {
+            var builder = CreateBuilderWithResponseCaching(new ResponseCachingOptions()
+            {
+                MaximumCachedBodySize = 1
+            },
+            async (context) =>
+            {
+                var uniqueId = Guid.NewGuid().ToString();
+                var headers = context.Response.GetTypedHeaders();
+                headers.CacheControl = new CacheControlHeaderValue()
+                {
+                    Public = true,
+                    MaxAge = TimeSpan.FromSeconds(10)
+                };
+                headers.Date = DateTimeOffset.UtcNow;
+                headers.Headers["X-Value"] = uniqueId;
+                await context.Response.WriteAsync(uniqueId);
+            });
+
+            using (var server = new TestServer(builder))
+            {
+                var client = server.CreateClient();
+                var initialResponse = await client.GetAsync("");
+                var subsequentResponse = await client.GetAsync("/different");
+
+                await AssertResponseNotCachedAsync(initialResponse, subsequentResponse);
+            }
+        }
+
+        private static async Task AssertResponseCachedAsync(HttpResponseMessage initialResponse, HttpResponseMessage subsequentResponse)
+        {
+            initialResponse.EnsureSuccessStatusCode();
+            subsequentResponse.EnsureSuccessStatusCode();
+
+            foreach (var header in initialResponse.Headers)
+            {
+                Assert.Equal(initialResponse.Headers.GetValues(header.Key), subsequentResponse.Headers.GetValues(header.Key));
+            }
+            Assert.True(subsequentResponse.Headers.Contains(HeaderNames.Age));
+            Assert.Equal(await initialResponse.Content.ReadAsStringAsync(), await subsequentResponse.Content.ReadAsStringAsync());
+        }
+
+        private static async Task AssertResponseNotCachedAsync(HttpResponseMessage initialResponse, HttpResponseMessage subsequentResponse)
+        {
+            initialResponse.EnsureSuccessStatusCode();
+            subsequentResponse.EnsureSuccessStatusCode();
+
+            Assert.False(subsequentResponse.Headers.Contains(HeaderNames.Age));
+            Assert.NotEqual(await initialResponse.Content.ReadAsStringAsync(), await subsequentResponse.Content.ReadAsStringAsync());
+        }
+
+        private static IWebHostBuilder CreateBuilderWithResponseCaching(RequestDelegate requestDelegate) =>
+            CreateBuilderWithResponseCaching(app => { }, new ResponseCachingOptions(), requestDelegate);
+
+        private static IWebHostBuilder CreateBuilderWithResponseCaching(Action<IApplicationBuilder> configureDelegate, RequestDelegate requestDelegate) =>
+            CreateBuilderWithResponseCaching(configureDelegate, new ResponseCachingOptions(), requestDelegate);
+
+        private static IWebHostBuilder CreateBuilderWithResponseCaching(ResponseCachingOptions options, RequestDelegate requestDelegate) =>
+            CreateBuilderWithResponseCaching(app => { }, options, requestDelegate);
+
+        private static IWebHostBuilder CreateBuilderWithResponseCaching(Action<IApplicationBuilder> configureDelegate, ResponseCachingOptions options, RequestDelegate requestDelegate)
         {
             return new WebHostBuilder()
                 .ConfigureServices(services =>
@@ -765,7 +833,7 @@ namespace Microsoft.AspNetCore.ResponseCaching.Tests
                 .Configure(app =>
                 {
                     configureDelegate(app);
-                    app.UseResponseCaching();
+                    app.UseResponseCaching(options);
                     app.Run(requestDelegate);
                 });
         }

@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Http.Headers;
@@ -25,7 +26,7 @@ namespace Microsoft.AspNetCore.ResponseCaching
 
         private readonly HttpContext _httpContext;
         private readonly IResponseCache _cache;
-        private readonly ISystemClock _clock;
+        private readonly ResponseCachingOptions _options;
         private readonly ObjectPool<StringBuilder> _builderPool;
         private readonly IResponseCachingCacheabilityValidator _cacheabilityValidator;
         private readonly IResponseCachingCacheKeySuffixProvider _cacheKeySuffixProvider;
@@ -40,29 +41,19 @@ namespace Microsoft.AspNetCore.ResponseCaching
         private CachedResponse _cachedResponse;
         private TimeSpan _cachedResponseValidFor;
         internal DateTimeOffset _responseTime;
-        
-        internal ResponseCachingContext(
-            HttpContext httpContext,
-            IResponseCache cache,
-            ObjectPool<StringBuilder> builderPool,
-            IResponseCachingCacheabilityValidator cacheabilityValidator,
-            IResponseCachingCacheKeySuffixProvider cacheKeySuffixProvider)
-            : this(httpContext, cache, new SystemClock(), builderPool, cacheabilityValidator, cacheKeySuffixProvider)
-        {
-        }
 
         // Internal for testing
         internal ResponseCachingContext(
             HttpContext httpContext, 
             IResponseCache cache,
-            ISystemClock clock,
+            ResponseCachingOptions options,
             ObjectPool<StringBuilder> builderPool,
             IResponseCachingCacheabilityValidator cacheabilityValidator,
             IResponseCachingCacheKeySuffixProvider cacheKeySuffixProvider)
         {
             _httpContext = httpContext;
             _cache = cache;
-            _clock = clock;
+            _options = options;
             _builderPool = builderPool;
             _cacheabilityValidator = cacheabilityValidator;
             _cacheKeySuffixProvider = cacheKeySuffixProvider;
@@ -74,10 +65,7 @@ namespace Microsoft.AspNetCore.ResponseCaching
             {
                 if (_cacheResponse == null)
                 {
-                    // TODO: apparent age vs corrected age value
-                    var responseAge = _responseTime - ResponseHeaders.Date ?? TimeSpan.Zero;
-
-                    _cacheResponse = ResponseIsCacheable() && EntryIsFresh(ResponseHeaders, responseAge, verifyAgainstRequest: false);
+                    _cacheResponse = ResponseIsCacheable();
                 }
                 return _cacheResponse.Value;
             }
@@ -367,6 +355,14 @@ namespace Microsoft.AspNetCore.ResponseCaching
                 return false;
             }
 
+            // Check response freshness
+            // TODO: apparent age vs corrected age value
+            var responseAge = _responseTime - ResponseHeaders.Date ?? TimeSpan.Zero;
+            if (!EntryIsFresh(ResponseHeaders, responseAge, verifyAgainstRequest: false))
+            {
+                return false;
+            }
+
             return true;
         }
 
@@ -437,7 +433,7 @@ namespace Microsoft.AspNetCore.ResponseCaching
                 var cachedResponse = cacheEntry as CachedResponse;
                 var cachedResponseHeaders = new ResponseHeaders(cachedResponse.Headers);
 
-                _responseTime = _clock.UtcNow;
+                _responseTime = _options.SystemClock.UtcNow;
                 var age = _responseTime - cachedResponse.Created;
                 age = age > TimeSpan.Zero ? age : TimeSpan.Zero;
 
@@ -602,6 +598,12 @@ namespace Microsoft.AspNetCore.ResponseCaching
             {
                 _cachedResponse.Body = ResponseCacheStream.BufferedStream.ToArray();
 
+                // Check if the body is too large to be cached
+                if (_options.MaximumCachedBodySize < _cachedResponse.Body.Length)
+                {
+                    return;
+                }
+
                 _cache.Set(_cacheKey, _cachedResponse, _cachedResponseValidFor);
             }
         }
@@ -611,7 +613,7 @@ namespace Microsoft.AspNetCore.ResponseCaching
             if (!ResponseStarted)
             {
                 ResponseStarted = true;
-                _responseTime = _clock.UtcNow;
+                _responseTime = _options.SystemClock.UtcNow;
 
                 FinalizeCachingHeaders();
             }
