@@ -11,7 +11,7 @@ namespace Microsoft.AspNetCore.Builder
         /// <summary>
         /// The largest cacheable size for the response body in bytes.
         /// </summary>
-        public int? MaximumCachedBodySize { get; set; }
+        public long MaximumCachedBodySize { get; set; } = 1024 * 1024;
 
         /// <summary>
         /// For testing purposes only.

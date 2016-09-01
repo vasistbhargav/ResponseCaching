@@ -594,9 +594,7 @@ namespace Microsoft.AspNetCore.ResponseCaching
 
         internal void FinalizeCachingBody()
         {
-            if (CacheResponse &&
-                ResponseCacheStream.BufferingEnabled &&
-                !(_options.MaximumCachedBodySize < ResponseCacheStream.BufferedStream.Length))
+            if (CacheResponse && ResponseCacheStream.BufferingEnabled)
             {
                 _cachedResponse.Body = ResponseCacheStream.BufferedStream.ToArray();
 
@@ -621,7 +619,7 @@ namespace Microsoft.AspNetCore.ResponseCaching
 
             // Shim response stream
             OriginalResponseStream = _httpContext.Response.Body;
-            ResponseCacheStream = new ResponseCacheStream(OriginalResponseStream);
+            ResponseCacheStream = new ResponseCacheStream(OriginalResponseStream, _options.MaximumCachedBodySize);
             _httpContext.Response.Body = ResponseCacheStream;
 
             // Shim IHttpSendFileFeature
