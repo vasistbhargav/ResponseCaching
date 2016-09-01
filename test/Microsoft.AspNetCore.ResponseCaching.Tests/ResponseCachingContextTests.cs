@@ -260,13 +260,11 @@ namespace Microsoft.AspNetCore.ResponseCaching.Tests
 
         private class KeyModifier : IResponseCachingCacheKeyModifier
         {
-            public string CreateKeySuffix(HttpContext httpContext) => "CustomizedKeySuffix";
-
             public string CreatKeyPrefix(HttpContext httpContext) => "CustomizedKeyPrefix";
         }
 
         [Fact]
-        public void CreateCacheKey_CacheKeyModifier_AddsPrefixAndSuffix()
+        public void CreateCacheKey_CacheKeyModifier_AddsPrefix()
         {
             var httpContext = new DefaultHttpContext();
             httpContext.Request.Method = "GET";
@@ -275,7 +273,7 @@ namespace Microsoft.AspNetCore.ResponseCaching.Tests
             httpContext.Request.Headers["HeaderB"] = "ValueB";
             var responseCachingContext = CreateTestContext(httpContext, new KeyModifier());
 
-            Assert.Equal($"CustomizedKeyPrefix{KeyDelimiter}GET{KeyDelimiter}/{KeyDelimiter}H{KeyDelimiter}HeaderA=ValueA{KeyDelimiter}HeaderC=null{KeyDelimiter}C{KeyDelimiter}CustomizedKeySuffix", responseCachingContext.CreateCacheKey(new CachedVaryBy()
+            Assert.Equal($"CustomizedKeyPrefix{KeyDelimiter}GET{KeyDelimiter}/{KeyDelimiter}H{KeyDelimiter}HeaderA=ValueA{KeyDelimiter}HeaderC=null", responseCachingContext.CreateCacheKey(new CachedVaryBy()
             {
                 Headers = new string[] { "HeaderA", "HeaderC" }
             }));

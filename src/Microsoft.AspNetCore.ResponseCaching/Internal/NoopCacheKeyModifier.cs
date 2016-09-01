@@ -7,8 +7,6 @@ namespace Microsoft.AspNetCore.ResponseCaching.Internal
 {
     internal class NoopCacheKeyModifier : IResponseCachingCacheKeyModifier
     {
-        public string CreateKeySuffix(HttpContext httpContext) => null;
-
         public string CreatKeyPrefix(HttpContext httpContext) => null;
     }
 }

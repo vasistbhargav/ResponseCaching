@@ -233,18 +233,6 @@ namespace Microsoft.AspNetCore.ResponseCaching
                     }
                 }
 
-                // Append custom cache key suffix
-                var customKeySuffix = _cacheKeyModifier.CreateKeySuffix(_httpContext);
-                if (!string.IsNullOrEmpty(customKeySuffix))
-                {
-                    // Append a group separator for the cache key suffix
-                    builder.Append(KeyDelimiter)
-                        .Append('C');
-
-                    builder.Append(KeyDelimiter)
-                        .Append(customKeySuffix);
-                }
-
                 return builder.ToString();
             }
             finally
